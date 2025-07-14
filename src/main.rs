@@ -64,17 +64,18 @@ impl Layout for LuaLayout {
         args.set("height", usable_height)?;
         args.set("output", output)?;
 
-        let layout = self
-            .lua
-            .globals()
-            .get::<LuaFunction>("handle_layout")?
-            .call::<LuaTable>(args.clone())?;
+        let module_results = match &self.exports {
+            Some(table) => table.clone(),
+            None => self.lua.globals(),
+        };
 
-        let metadata = self
-            .lua
-            .globals()
+        let layout = module_results
+            .get::<LuaFunction>("handle_layout")?
+            .call::<LuaTable>(&args)?;
+
+        let metadata = module_results
             .get::<Option<LuaFunction>>("handle_metadata")?
-            .map(|f| f.call::<LuaTable>(args))
+            .map(|f| f.call::<LuaTable>(&args))
             .transpose()?;
 
         let name = metadata.as_ref().and_then(|m| m.get::<String>("name").ok());
@@ -117,6 +118,7 @@ const DEFAULT_LAYOUT: &str = include_str!("../layout.lua");
 
 struct LuaLayout {
     lua: Lua,
+    exports: Option<LuaTable>,
 }
 
 impl LuaLayout {
@@ -133,8 +135,8 @@ impl LuaLayout {
             }
         };
         let lua = Lua::new();
-        lua.load(layout_str).exec()?;
-        Ok(Self { lua })
+        let exports = lua.load(layout_str).eval()?;
+        Ok(Self { lua, exports })
     }
 }
 
